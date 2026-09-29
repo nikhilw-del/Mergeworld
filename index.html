@@ -257,7 +257,7 @@
     <div class="month-label" id="monthLabel"></div>
     <button onclick="changeMonth(1)">&#8594;</button>
   </div>
-  <div style="width:1px;"></div>
+  <span id="syncStatus" style="font-size:11px;font-weight:600;color:#B45309;background:rgba(255,255,255,0.08);padding:5px 11px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);">● Connecting…</span>
 </header>
 
 <div class="main">
@@ -379,9 +379,38 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 let currentYear, currentMonth;
 let leaves = {}; // { 'YYYY-MM-DD': { resourceId, reason } }
 let modalContext = null;
-let dbRef = null;
-let dbReady = false;
-let syncTimer = null;
+let dbRef = null;       // Claude artifact db doc ref (when running inside claude.ai)
+let fbDocRef = null;    // Firebase Firestore doc ref (when running on GitHub Pages / elsewhere)
+let fbOnSnapshot = null;
+let fbSetDoc = null;
+
+// ──────────────────────────────────────────────
+// FIREBASE CONFIG
+// Paste your Firebase project's config object below (from
+// Firebase Console → Project settings → General → Your apps → SDK setup).
+// Leave FIREBASE_CONFIG as null to run in local-only mode.
+// ──────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCfaqZbRZCvdi8gXYwbwLiyShQLv5EE_xY",
+  authDomain: "mergeworld-tracker.firebaseapp.com",
+  projectId: "mergeworld-tracker",
+  storageBucket: "mergeworld-tracker.firebasestorage.app",
+  messagingSenderId: "7548071372",
+  appId: "1:7548071372:web:800ece0f6c83345d610169"
+};
+/* Example:
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  authDomain: "mergeworld-tracker.firebaseapp.com",
+  projectId: "mergeworld-tracker",
+  storageBucket: "mergeworld-tracker.appspot.com",
+  messagingSenderId: "123456789012",
+  appId: "1:123456789012:web:abcdef1234567890abcdef"
+};
+*/
+// Firestore location for the shared leave data — change if you want
+// several trackers in one Firebase project.
+const FIREBASE_DOC_PATH = { collection: 'mergeworld_tracker', doc: 'leaves' };
 
 // ──────────────────────────────────────────────
 // INIT
@@ -391,34 +420,74 @@ function init() {
   currentYear = now.getFullYear();
   currentMonth = now.getMonth();
 
-  // Render immediately with whatever we have (empty), then connect to shared db
+  // Render immediately with whatever we have (empty), then connect to shared storage
   render();
   connectSharedDb();
 }
 
 async function connectSharedDb() {
-  if (!(window.claude && typeof window.claude.use === 'function')) {
-    setSyncStatus('local');
-    return;
+  // 1) Running inside a claude.ai artifact view — use the built-in db capability
+  if (window.claude && typeof window.claude.use === 'function') {
+    try {
+      const db = await window.claude.use('db');
+      if (db) {
+        dbRef = db.doc('data/leaves');
+        dbRef.onSnapshot((snap) => {
+          const data = snap.exists ? snap.data() : {};
+          leaves = (data && data.leaves) ? data.leaves : {};
+          setSyncStatus('synced');
+          render();
+        }, (err) => {
+          console.error('db sync error', err);
+          setSyncStatus('error');
+        });
+        return;
+      }
+    } catch (e) {
+      console.error('claude db connect failed', e);
+      // fall through to Firebase / local
+    }
   }
-  try {
-    const db = await window.claude.use('db');
-    if (!db) { setSyncStatus('local'); return; }
-    dbRef = db.doc('data/leaves');
-    dbRef.onSnapshot((snap) => {
-      dbReady = true;
-      const data = snap.exists ? snap.data() : {};
-      leaves = (data && data.leaves) ? data.leaves : {};
-      setSyncStatus('synced');
-      render();
-    }, (err) => {
-      console.error('db sync error', err);
+
+  // 2) Firebase, for GitHub Pages or any other static host
+  if (FIREBASE_CONFIG) {
+    try {
+      const appMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js');
+      const fsMod = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
+      const app = appMod.initializeApp(FIREBASE_CONFIG);
+      const firestore = fsMod.getFirestore(app);
+      fbDocRef = fsMod.doc(firestore, FIREBASE_DOC_PATH.collection, FIREBASE_DOC_PATH.doc);
+      fbSetDoc = fsMod.setDoc;
+      fbOnSnapshot = fsMod.onSnapshot;
+
+      fbOnSnapshot(fbDocRef, (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        leaves = (data && data.leaves) ? data.leaves : {};
+        setSyncStatus('synced');
+        render();
+      }, (err) => {
+        console.error('firebase sync error', err);
+        setSyncStatus('error');
+      });
+      return;
+    } catch (e) {
+      console.error('firebase connect failed', e);
       setSyncStatus('error');
-    });
-  } catch (e) {
-    console.error('db connect failed', e);
-    setSyncStatus('local');
+      loadLocalFallback();
+      return;
+    }
   }
+
+  // 3) No shared backend configured — local browser only
+  setSyncStatus('local');
+  loadLocalFallback();
+}
+
+function loadLocalFallback() {
+  try {
+    const saved = localStorage.getItem('mw_leaves_v2');
+    if (saved) { leaves = JSON.parse(saved); render(); }
+  } catch(e) {}
 }
 
 function setSyncStatus(status) {
@@ -426,9 +495,9 @@ function setSyncStatus(status) {
   if (!el) return;
   const map = {
     synced: { text: '● Synced — shared with team', color: '#16A34A' },
-    local: { text: '● Local only — not shared', color: '#D97706' },
+    local: { text: '● Local only — not shared (add Firebase config)', color: '#B45309' },
     error: { text: '● Sync error — changes may not save', color: '#DC2626' },
-    saving: { text: '● Saving…', color: '#6B7280' }
+    saving: { text: '● Saving…', color: '#6B6B66' }
   };
   const s = map[status] || map.local;
   el.textContent = s.text;
@@ -437,6 +506,7 @@ function setSyncStatus(status) {
 
 async function saveToStorage() {
   if (dbRef) {
+    // Claude artifact db
     setSyncStatus('saving');
     try {
       await dbRef.set({ leaves: leaves });
@@ -444,12 +514,27 @@ async function saveToStorage() {
     } catch (e) {
       console.error('db write failed', e);
       setSyncStatus('error');
-      // fall back to local cache so this session doesn't lose the edit
       try { localStorage.setItem('mw_leaves_v2', JSON.stringify(leaves)); } catch(e2) {}
     }
-  } else {
-    try { localStorage.setItem('mw_leaves_v2', JSON.stringify(leaves)); } catch(e) {}
+    return;
   }
+
+  if (fbDocRef && fbSetDoc) {
+    // Firebase Firestore
+    setSyncStatus('saving');
+    try {
+      await fbSetDoc(fbDocRef, { leaves: leaves });
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error('firebase write failed', e);
+      setSyncStatus('error');
+      try { localStorage.setItem('mw_leaves_v2', JSON.stringify(leaves)); } catch(e2) {}
+    }
+    return;
+  }
+
+  // No shared backend — local only
+  try { localStorage.setItem('mw_leaves_v2', JSON.stringify(leaves)); } catch(e) {}
 }
 
 // ──────────────────────────────────────────────
