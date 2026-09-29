@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mergeworld Leave & Backup Tracker</title>
+<style>
+  :root {
+    --bg: #F7F8FC;
+    --surface: #FFFFFF;
+    --border: #E2E6F0;
+    --accent: #4B6BFB;
+    --accent-light: #EEF1FF;
+    --text: #1A1D2E;
+    --muted: #6B7280;
+    --green: #16A34A;
+    --green-light: #DCFCE7;
+    --amber: #D97706;
+    --amber-light: #FEF3C7;
+    --red: #DC2626;
+    --red-light: #FEE2E2;
+    --purple: #7C3AED;
+    --purple-light: #EDE9FE;
+    --teal: #0891B2;
+    --teal-light: #CFFAFE;
+    --gray-light: #F1F5F9;
+    --radius: 10px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo { font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
+  .logo span { color: var(--accent); }
+  .month-nav { display: flex; align-items: center; gap: 10px; }
+  .month-nav button {
+    background: var(--gray-light);
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    transition: background 0.15s;
+  }
+  .month-nav button:hover { background: var(--border); }
+  .month-label { font-weight: 600; font-size: 14px; min-width: 120px; text-align: center; }
+
+  .main { padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
+
+  /* Legend */
+  .legend {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center;
+  }
+  .legend-title { font-size: 11px; font-weight: 600; color: var(--muted); margin-right: 4px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500;
+  }
+  .chip-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+  /* Resource roster */
+  .roster {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px; margin-bottom: 18px;
+  }
+  .resource-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+  }
+  .resource-card .name { font-weight: 600; font-size: 13px; }
+  .resource-card .role { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .resource-card .badge {
+    margin-top: 6px; display: inline-block;
+    padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600;
+  }
+
+  /* Calendar grid */
+  .calendar-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .cal-header {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 1fr);
+    background: var(--accent);
+    color: white;
+    font-weight: 600; font-size: 11px;
+  }
+  .cal-header div, .cal-body .day-label {
+    padding: 8px 6px; text-align: center;
+  }
+  .cal-header div:first-child { text-align: left; padding-left: 12px; }
+
+  .week-row {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 1fr);
+    border-top: 1px solid var(--border);
+  }
+  .week-row:first-child { border-top: none; }
+
+  .resource-label {
+    padding: 8px 12px;
+    border-right: 1px solid var(--border);
+    font-weight: 600; font-size: 11px;
+    display: flex; align-items: flex-start;
+    background: var(--gray-light);
+    gap: 5px;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .resource-label .rl-name { font-weight: 700; font-size: 12px; }
+  .resource-label .rl-type { font-size: 9px; color: var(--muted); font-weight: 500; }
+
+  .day-cell {
+    border-right: 1px solid var(--border);
+    padding: 5px 4px;
+    min-height: 52px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.1s;
+  }
+  .day-cell:last-child { border-right: none; }
+  .day-cell.weekend { background: #FAFBFF; cursor: default; }
+  .day-cell.not-scheduled { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f3f3f3 4px, #f3f3f3 8px); cursor: default; }
+  .day-cell.working { background: var(--green-light); }
+  .day-cell.on-leave { background: var(--red-light); }
+  .day-cell.backup { background: var(--amber-light); }
+  .day-cell.adhoc-day { background: var(--teal-light); }
+  .day-cell.adhoc-other { background: var(--purple-light); }
+  .day-cell:not(.weekend):not(.not-scheduled):hover { filter: brightness(0.96); }
+
+  .cell-status {
+    font-size: 9px; font-weight: 600; text-align: center;
+    padding: 2px 3px; border-radius: 4px;
+    line-height: 1.2;
+  }
+  .cell-day-num {
+    font-size: 10px; color: var(--muted); font-weight: 500; text-align: right;
+    margin-bottom: 2px;
+  }
+  .cell-flag {
+    position: absolute; bottom: 3px; right: 3px;
+    font-size: 9px; background: var(--red); color: white;
+    border-radius: 3px; padding: 1px 3px; font-weight: 700;
+  }
+
+  /* Alert bar */
+  .alerts {
+    margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .alert {
+    border-radius: 8px; padding: 9px 13px; font-size: 12px;
+    border-left: 3px solid;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .alert-icon { font-size: 14px; flex-shrink: 0; }
+  .alert.warn { background: var(--amber-light); border-color: var(--amber); color: #92400e; }
+  .alert.info { background: var(--accent-light); border-color: var(--accent); color: #1e3a8a; }
+  .alert.danger { background: var(--red-light); border-color: var(--red); color: #7f1d1d; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35); z-index: 200;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 24px;
+    width: min(400px, 94vw);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  }
+  .modal h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .modal .sub { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+  .modal label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .modal select, .modal input, .modal textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 10px; font-size: 13px; margin-bottom: 12px;
+    outline: none; font-family: inherit;
+  }
+  .modal select:focus, .modal input:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .btn {
+    border: none; border-radius: 7px; padding: 8px 16px;
+    font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-ghost { background: var(--gray-light); color: var(--text); }
+  .btn-danger { background: var(--red-light); color: var(--red); }
+
+  /* Summary row at top */
+  .summary-strip {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px; margin-bottom: 16px;
+  }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow);
+  }
+  .stat-card .stat-val { font-size: 22px; font-weight: 800; }
+  .stat-card .stat-label { font-size: 10px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+
+  /* Export button */
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .toolbar-left { font-size: 13px; font-weight: 700; }
+  .toolbar-right { display: flex; gap: 8px; }
+
+  .section-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+
+  @media (max-width: 700px) {
+    .cal-header, .week-row { grid-template-columns: 72px repeat(7, 1fr); font-size: 10px; }
+    .resource-label { padding: 6px 7px; }
+    .main { padding: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Mergeworld <span>Leave Tracker</span></div>
+  <div class="month-nav">
+    <button onclick="changeMonth(-1)">&#8592;</button>
+    <div class="month-label" id="monthLabel"></div>
+    <button onclick="changeMonth(1)">&#8594;</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <span id="syncStatus" style="font-size:11px;font-weight:600;color:#D97706;">● Connecting…</span>
+    <button class="btn btn-primary" onclick="exportCSV()" style="font-size:12px;padding:6px 13px;">⬇ Export CSV</button>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Roster -->
+  <div class="section-title">Team Roster — Mergeworld</div>
+  <div class="roster" id="rosterCards"></div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <span class="legend-title">Legend:</span>
+    <span class="chip" style="background:var(--green-light);color:var(--green)"><span class="chip-dot" style="background:var(--green)"></span>Working</span>
+    <span class="chip" style="background:var(--red-light);color:var(--red)"><span class="chip-dot" style="background:var(--red)"></span>On Leave</span>
+    <span class="chip" style="background:var(--amber-light);color:var(--amber)"><span class="chip-dot" style="background:var(--amber)"></span>Backup Active</span>
+    <span class="chip" style="background:var(--teal-light);color:var(--teal)"><span class="chip-dot" style="background:var(--teal)"></span>Divya — Mergeworld (Fri)</span>
+    <span class="chip" style="background:var(--purple-light);color:var(--purple)"><span class="chip-dot" style="background:var(--purple)"></span>Divya — Smartpandalabs</span>
+    <span class="chip" style="background:#f1f5f9;color:var(--muted)"><span class="chip-dot" style="background:var(--muted)"></span>Weekend / N/A</span>
+  </div>
+
+  <!-- Alerts -->
+  <div class="alerts" id="alertsBox"></div>
+
+  <!-- Summary -->
+  <div class="summary-strip" id="summaryStrip"></div>
+
+  <!-- Calendar -->
+  <div class="toolbar">
+    <div class="toolbar-left" id="calTitle"></div>
+    <div class="toolbar-right">
+      <span style="font-size:11px;color:var(--muted);align-self:center;">Click a working day cell to mark leave</span>
+    </div>
+  </div>
+  <div class="calendar-wrap">
+    <div class="cal-header" id="calHeader">
+      <div>Resource</div>
+      <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+    </div>
+    <div id="calBody"></div>
+  </div>
+
+</div>
+
+<!-- Leave Modal -->
+<div class="modal-overlay" id="leaveModal">
+  <div class="modal">
+    <h3 id="modalTitle">Mark Leave</h3>
+    <div class="sub" id="modalSub"></div>
+    <label>Leave Date</label>
+    <input type="date" id="leaveDate" />
+    <label>Reason (optional)</label>
+    <input type="text" id="leaveReason" placeholder="e.g. Sick, Personal, Travel" />
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="removeLeave()" id="removeLeaveBtn" style="display:none">Remove Leave</button>
+      <button class="btn btn-primary" onclick="saveLeave()">Mark Leave</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+// DATA MODEL
+// ──────────────────────────────────────────────
+const RESOURCES = [
+  {
+    id: 'poushali',
+    name: 'Poushali',
+    type: 'Full-time Dedicated',
+    engagement: 'Mergeworld',
+    workDays: [1,2,3,4,5], // Mon-Fri
+    color: '#16A34A',
+    bgColor: '#DCFCE7'
+  },
+  {
+    id: 'vishal',
+    name: 'Vishal',
+    type: 'Part-time Dedicated',
+    engagement: 'Mergeworld',
+    workDays: [1,2,3,4,5],
+    color: '#2563EB',
+    bgColor: '#DBEAFE'
+  },
+  {
+    id: 'vaishali',
+    name: 'Vaishali',
+    type: 'Part-time Dedicated',
+    engagement: 'Mergeworld',
+    workDays: [1,2,3,4,5],
+    color: '#7C3AED',
+    bgColor: '#EDE9FE'
+  },
+  {
+    id: 'divya',
+    name: 'Divya',
+    type: 'Adhoc (Fri only)',
+    engagement: 'Mergeworld (Fri) + Smartpandalabs (Mon-Thu)',
+    workDays: [5], // Friday for Mergeworld
+    color: '#0891B2',
+    bgColor: '#CFFAFE'
+  }
+];
+
+const DAYS_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+let currentYear, currentMonth;
+let leaves = {}; // { 'YYYY-MM-DD': { resourceId, reason } }
+let modalContext = null;
+let dbRef = null;
+let dbReady = false;
+let syncTimer = null;
+
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+function init() {
+  const now = new Date();
+  currentYear = now.getFullYear();
+  currentMonth = now.getMonth();
+
+  // Render immediately with whatever we have (empty), then connect to shared db
+  render();
+  connectSharedDb();
+}
+
+async function connectSharedDb() {
+  if (!(window.claude && typeof window.claude.use === 'function')) {
+    setSyncStatus('local');
+    return;
+  }
+  try {
+    const db = await window.claude.use('db');
+    if (!db) { setSyncStatus('local'); return; }
+    dbRef = db.doc('data/leaves');
+    dbRef.onSnapshot((snap) => {
+      dbReady = true;
+      const data = snap.exists ? snap.data() : {};
+      leaves = (data && data.leaves) ? data.leaves : {};
+      setSyncStatus('synced');
+      render();
+    }, (err) => {
+      console.error('db sync error', err);
+      setSyncStatus('error');
+    });
+  } catch (e) {
+    console.error('db connect failed', e);
+    setSyncStatus('local');
+  }
+}
+
+function setSyncStatus(status) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  const map = {
+    synced: { text: '● Synced — shared with team', color: '#16A34A' },
+    local: { text: '● Local only — not shared', color: '#D97706' },
+    error: { text: '● Sync error — changes may not save', color: '#DC2626' },
+    saving: { text: '● Saving…', color: '#6B7280' }
+  };
+  const s = map[status] || map.local;
+  el.textContent = s.text;
+  el.style.color = s.color;
+}
+
+async function saveToStorage() {
+  if (dbRef) {
+    setSyncStatus('saving');
+    try {
+      await dbRef.set({ leaves: leaves });
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error('db write failed', e);
+      setSyncStatus('error');
+      // fall back to local cache so this session doesn't lose the edit
+      try { localStorage.setItem('mw_leaves_v2', JSON.stringify(leaves)); } catch(e2) {}
+    }
+  } else {
+    try { localStorage.setItem('mw_leaves_v2', JSON.stringify(leaves)); } catch(e) {}
+  }
+}
+
+// ──────────────────────────────────────────────
+// NAVIGATION
+// ──────────────────────────────────────────────
+function changeMonth(dir) {
+  currentMonth += dir;
+  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  render();
+}
+
+// ──────────────────────────────────────────────
+// BACKUP LOGIC
+// ──────────────────────────────────────────────
+function getDayOfWeek(dateStr) {
+  // Returns 1=Mon ... 7=Sun
+  const d = new Date(dateStr + 'T12:00:00');
+  const day = d.getDay(); // 0=Sun
+  return day === 0 ? 7 : day;
+}
+
+function isOnLeave(resourceId, dateStr) {
+  return leaves[dateStr] && leaves[dateStr][resourceId] !== undefined;
+}
+
+function isDivyaBackupNeeded(dateStr) {
+  // Mon-Thu: if any dedicated resource is on leave
+  const dow = getDayOfWeek(dateStr);
+  if (dow >= 1 && dow <= 4) {
+    return RESOURCES.filter(r => r.id !== 'divya').some(r => isOnLeave(r.id, dateStr));
+  }
+  return false;
+}
+
+function isDivyaOnLeave(dateStr) {
+  return isOnLeave('divya', dateStr);
+}
+
+function getCellState(resource, dateStr) {
+  const dow = getDayOfWeek(dateStr);
+  const isWeekend = dow >= 6;
+
+  if (isWeekend) return 'weekend';
+
+  if (resource.id === 'divya') {
+    if (dow === 5) { // Friday
+      if (isOnLeave('divya', dateStr)) return 'on-leave';
+      if (isDivyaBackupNeeded(dateStr)) return 'backup'; // shouldn't happen on Fri usually
+      return 'adhoc-day';
+    } else {
+      // Mon-Thu: Divya is on Smartpandalabs
+      if (isOnLeave('divya', dateStr)) return 'on-leave'; // just mark for tracking
+      return 'adhoc-other';
+    }
+  }
+
+  // Dedicated resources
+  if (isOnLeave(resource.id, dateStr)) return 'on-leave';
+  return 'working';
+}
+
+function getCellLabel(resource, dateStr) {
+  const state = getCellState(resource, dateStr);
+  const dow = getDayOfWeek(dateStr);
+  if (state === 'weekend') return '';
+  if (resource.id === 'divya') {
+    if (state === 'on-leave') return '🏖 Leave';
+    if (state === 'adhoc-day') {
+      // check if backup needed
+      const backupNeeded = isDivyaBackupNeeded(dateStr);
+      // Fri: divya works MW anyway
+      return backupNeeded ? '🔔 Backup' : '✓ Mergeworld';
+    }
+    if (state === 'adhoc-other') return '🔀 Smartpanda';
+    return '';
+  }
+  if (state === 'on-leave') {
+    const leaveData = leaves[dateStr] && leaves[dateStr][resource.id];
+    return '🏖 Leave' + (leaveData && leaveData.reason ? '\n' + leaveData.reason : '');
+  }
+  return '✓ Working';
+}
+
+function hasConflict(dateStr) {
+  const dow = getDayOfWeek(dateStr);
+  if (dow >= 6) return false;
+
+  // Rule: if Divya is on leave Mon-Thu, ideally no dedicated should be on leave
+  if (dow >= 1 && dow <= 4 && isDivyaOnLeave(dateStr)) {
+    const dedicatedOnLeave = RESOURCES.filter(r => r.id !== 'divya' && isOnLeave(r.id, dateStr));
+    if (dedicatedOnLeave.length > 0) return { type: 'danger', dedicatedOnLeave };
+  }
+  return false;
+}
+
+// ──────────────────────────────────────────────
+// RENDER
+// ──────────────────────────────────────────────
+function render() {
+  renderRoster();
+  renderCalendar();
+  renderAlerts();
+  renderSummary();
+}
+
+function renderRoster() {
+  const typeColors = {
+    'Full-time Dedicated': { bg: '#DCFCE7', color: '#16A34A' },
+    'Part-time Dedicated': { bg: '#DBEAFE', color: '#2563EB' },
+    'Adhoc (Fri only)': { bg: '#CFFAFE', color: '#0891B2' }
+  };
+  document.getElementById('rosterCards').innerHTML = RESOURCES.map(r => {
+    const tc = typeColors[r.type] || { bg: '#F3F4F6', color: '#6B7280' };
+    return `<div class="resource-card">
+      <div class="name">${r.name}</div>
+      <div class="role">${r.engagement}</div>
+      <span class="badge" style="background:${tc.bg};color:${tc.color}">${r.type}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderCalendar() {
+  const monthName = `${MONTHS[currentMonth]} ${currentYear}`;
+  document.getElementById('monthLabel').textContent = monthName;
+  document.getElementById('calTitle').textContent = `Monthly Calendar — ${monthName}`;
+
+  const firstDay = new Date(currentYear, currentMonth, 1);
+  const lastDay = new Date(currentYear, currentMonth + 1, 0);
+
+  // Build all weeks
+  // Start from Monday of the week containing firstDay
+  let start = new Date(firstDay);
+  const startDow = firstDay.getDay() || 7; // 1=Mon..7=Sun
+  start.setDate(start.getDate() - (startDow - 1));
+
+  let end = new Date(lastDay);
+  const endDow = lastDay.getDay() || 7;
+  end.setDate(end.getDate() + (7 - endDow));
+
+  // Collect all weeks
+  const weeks = [];
+  let cur = new Date(start);
+  while (cur <= end) {
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      week.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+
+  const body = document.getElementById('calBody');
+  body.innerHTML = '';
+
+  RESOURCES.forEach(resource => {
+    weeks.forEach((week, wi) => {
+      const row = document.createElement('div');
+      row.className = 'week-row';
+
+      // Label only on first week for this resource
+      const label = document.createElement('div');
+      label.className = 'resource-label';
+      if (wi === 0) {
+        label.innerHTML = `<span class="rl-name">${resource.name}</span><span class="rl-type">${resource.type}</span>`;
+      }
+      row.appendChild(label);
+
+      week.forEach(date => {
+        const inMonth = date.getMonth() === currentMonth;
+        const dateStr = formatDate(date);
+        const dow = date.getDay() === 0 ? 7 : date.getDay();
+        const isWeekend = dow >= 6;
+        const state = getCellState(resource, dateStr);
+        const conflict = !isWeekend && hasConflict(dateStr);
+
+        const cell = document.createElement('div');
+        cell.className = 'day-cell';
+
+        if (!inMonth) {
+          cell.style.opacity = '0.3';
+        }
+
+        // Apply state class
+        if (state === 'weekend') cell.classList.add('weekend');
+        else if (state === 'on-leave') cell.classList.add('on-leave');
+        else if (state === 'adhoc-day') cell.classList.add('adhoc-day');
+        else if (state === 'adhoc-other') cell.classList.add('adhoc-other');
+        else if (state === 'backup') cell.classList.add('backup');
+        else cell.classList.add('working');
+
+        // Check backup for dedicated on Mon-Thu
+        const backupActive = resource.id !== 'divya' && !isWeekend && state !== 'on-leave' && isDivyaBackupNeeded(dateStr) && dow >= 1 && dow <= 4;
+
+        let label2 = getCellLabel(resource, dateStr);
+
+        // If divya is backing up this day (Mon-Thu), show on Divya's row
+        if (resource.id === 'divya' && state === 'adhoc-other') {
+          // Check if any dedicated is on leave today
+          const backupToday = isDivyaBackupNeeded(dateStr);
+          if (backupToday) {
+            cell.classList.remove('adhoc-other');
+            cell.classList.add('backup');
+            label2 = '🔔 Backup MW';
+          }
+        }
+
+        cell.innerHTML = `<div class="cell-day-num">${date.getDate()}</div>
+          <div class="cell-status">${label2.replace('\n','<br>')}</div>
+          ${conflict ? '<div class="cell-flag">!</div>' : ''}`;
+
+        // Click to open leave modal (only working cells for in-month non-weekend)
+        if (inMonth && !isWeekend) {
+          // Divya can only be marked on Mon-Thu (for tracking her leave from Smartpanda) or Friday
+          cell.style.cursor = 'pointer';
+          cell.addEventListener('click', () => openModal(resource, dateStr));
+        }
+
+        row.appendChild(cell);
+      });
+
+      body.appendChild(row);
+    });
+  });
+}
+
+function renderAlerts() {
+  const box = document.getElementById('alertsBox');
+  const msgs = [];
+
+  const firstDay = new Date(currentYear, currentMonth, 1);
+  const lastDay = new Date(currentYear, currentMonth + 1, 0);
+
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    const dateStr = formatDate(d);
+    const dow = d.getDay() === 0 ? 7 : d.getDay();
+    if (dow >= 6) continue;
+
+    const conflict = hasConflict(dateStr);
+    if (conflict && conflict.type === 'danger') {
+      msgs.push(`<div class="alert danger"><span class="alert-icon">⚠️</span>
+        <div><strong>${formatDisplay(d)}:</strong> Divya is on leave AND ${conflict.dedicatedOnLeave.map(r=>r.name).join(', ')} ${conflict.dedicatedOnLeave.length>1?'are':'is'} also on leave — no backup available.</div>
+      </div>`);
+    }
+
+    // If 3 dedicated on leave same day
+    const dedicatedLeaving = RESOURCES.filter(r => r.id !== 'divya' && isOnLeave(r.id, dateStr));
+    if (dedicatedLeaving.length >= 2 && dow >= 1 && dow <= 4) {
+      msgs.push(`<div class="alert warn"><span class="alert-icon">⚡</span>
+        <div><strong>${formatDisplay(d)}:</strong> ${dedicatedLeaving.map(r=>r.name).join(' & ')} are both on leave. Divya is assigned as backup (Mon–Thu).</div>
+      </div>`);
+    }
+  }
+
+  if (msgs.length === 0) {
+    box.innerHTML = `<div class="alert info"><span class="alert-icon">✅</span><div>No coverage conflicts this month. All backup assignments are in order.</div></div>`;
+  } else {
+    box.innerHTML = msgs.join('');
+  }
+}
+
+function renderSummary() {
+  const firstDay = new Date(currentYear, currentMonth, 1);
+  const lastDay = new Date(currentYear, currentMonth + 1, 0);
+
+  let totalLeaves = 0, backupDays = 0, conflicts = 0, workingDays = 0;
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    const dateStr = formatDate(d);
+    const dow = d.getDay() === 0 ? 7 : d.getDay();
+    if (dow >= 6) continue;
+    workingDays++;
+    RESOURCES.forEach(r => { if (isOnLeave(r.id, dateStr)) totalLeaves++; });
+    if (isDivyaBackupNeeded(dateStr)) backupDays++;
+    if (hasConflict(dateStr)) conflicts++;
+  }
+
+  document.getElementById('summaryStrip').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${workingDays}</div><div class="stat-label">Working Days</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--red)">${totalLeaves}</div><div class="stat-label">Leave Instances</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--amber)">${backupDays}</div><div class="stat-label">Backup Days (Divya)</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:${conflicts>0?'var(--red)':'var(--green)'}">${conflicts}</div><div class="stat-label">Coverage Conflicts</div></div>
+  `;
+}
+
+// ──────────────────────────────────────────────
+// MODAL
+// ──────────────────────────────────────────────
+function openModal(resource, dateStr) {
+  modalContext = { resource, dateStr };
+  const alreadyOnLeave = isOnLeave(resource.id, dateStr);
+  const leaveInfo = alreadyOnLeave && leaves[dateStr] && leaves[dateStr][resource.id];
+
+  document.getElementById('modalTitle').textContent = `${resource.name} — Leave`;
+  const d = new Date(dateStr + 'T12:00:00');
+  document.getElementById('modalSub').textContent = `${DAYS_SHORT[((d.getDay()||7)-1)]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  document.getElementById('leaveDate').value = dateStr;
+  document.getElementById('leaveReason').value = leaveInfo ? (leaveInfo.reason || '') : '';
+  document.getElementById('removeLeaveBtn').style.display = alreadyOnLeave ? 'inline-block' : 'none';
+  document.getElementById('leaveModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('leaveModal').classList.remove('open');
+  modalContext = null;
+}
+
+async function saveLeave() {
+  if (!modalContext) return;
+  const { resource, dateStr } = modalContext;
+  const reason = document.getElementById('leaveReason').value.trim();
+  if (!leaves[dateStr]) leaves[dateStr] = {};
+  leaves[dateStr][resource.id] = { reason };
+  closeModal();
+  render();
+  await saveToStorage();
+}
+
+async function removeLeave() {
+  if (!modalContext) return;
+  const { resource, dateStr } = modalContext;
+  if (leaves[dateStr]) {
+    delete leaves[dateStr][resource.id];
+    if (Object.keys(leaves[dateStr]).length === 0) delete leaves[dateStr];
+  }
+  closeModal();
+  render();
+  await saveToStorage();
+}
+
+// Close modal on overlay click
+document.getElementById('leaveModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ──────────────────────────────────────────────
+// EXPORT CSV (Google Sheets compatible)
+// ──────────────────────────────────────────────
+function exportCSV() {
+  const monthName = `${MONTHS[currentMonth]}_${currentYear}`;
+  const firstDay = new Date(currentYear, currentMonth, 1);
+  const lastDay = new Date(currentYear, currentMonth + 1, 0);
+
+  const headers = ['Date', 'Day', ...RESOURCES.map(r => r.name), 'Backup_Assigned', 'Conflict', 'Notes'];
+  const rows = [headers.join(',')];
+
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    const dateStr = formatDate(d);
+    const dow = d.getDay() === 0 ? 7 : d.getDay();
+    const dayName = DAYS_SHORT[dow - 1];
+    if (dow >= 6) continue;
+
+    const cols = [dateStr, dayName];
+    RESOURCES.forEach(r => {
+      const state = getCellState(r, dateStr);
+      let val = '';
+      if (r.id === 'divya') {
+        if (state === 'on-leave') val = 'Leave';
+        else if (state === 'adhoc-day') val = isDivyaBackupNeeded(dateStr) ? 'Mergeworld (Backup)' : 'Mergeworld';
+        else if (state === 'adhoc-other') val = isDivyaBackupNeeded(dateStr) ? 'Backup-MW' : 'Smartpandalabs';
+        else val = 'N/A';
+      } else {
+        if (state === 'on-leave') {
+          const info = leaves[dateStr] && leaves[dateStr][r.id];
+          val = 'Leave' + (info && info.reason ? ` (${info.reason})` : '');
+        } else val = 'Working';
+      }
+      cols.push(`"${val}"`);
+    });
+
+    const backupNeeded = isDivyaBackupNeeded(dateStr);
+    const conflict = hasConflict(dateStr);
+    cols.push(backupNeeded ? 'Divya' : '');
+    cols.push(conflict ? 'YES' : '');
+    const dedicatedLeave = RESOURCES.filter(r => r.id !== 'divya' && isOnLeave(r.id, dateStr));
+    cols.push(`"${dedicatedLeave.length ? dedicatedLeave.map(r=>r.name+' on leave').join('; ') : ''}"`);
+    rows.push(cols.join(','));
+  }
+
+  const csv = rows.join('\n');
+  const filename = `Mergeworld_Leave_Tracker_${monthName}.csv`;
+
+  if (window.claude && typeof window.claude.use === 'function') {
+    window.claude.use('downloads').then(async (downloads) => {
+      if (downloads) {
+        try {
+          await downloads.save({ filename, data: csv });
+          return;
+        } catch (e) { /* fall through to manual copy */ }
+      }
+      fallbackCSV(csv, filename);
+    }).catch(() => fallbackCSV(csv, filename));
+  } else {
+    fallbackCSV(csv, filename);
+  }
+}
+
+function fallbackCSV(csv, filename) {
+  // Show CSV in a copyable textarea as a fallback when direct download isn't available
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.innerHTML = `<div class="modal" style="width:min(560px,94vw)">
+    <h3>Export CSV</h3>
+    <div class="sub">Direct download isn't available here. Copy the text below and paste it into a new Google Sheet, or select all and save as ${filename}.</div>
+    <textarea id="csvOut" style="width:100%;height:240px;font-family:monospace;font-size:11px;margin-bottom:12px;" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="csvCloseBtn">Close</button>
+      <button class="btn btn-primary" id="csvCopyBtn">Copy to Clipboard</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const ta = overlay.querySelector('#csvOut');
+  ta.value = csv;
+  overlay.querySelector('#csvCloseBtn').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#csvCopyBtn').addEventListener('click', () => {
+    ta.select();
+    try {
+      navigator.clipboard.writeText(csv);
+      overlay.querySelector('#csvCopyBtn').textContent = 'Copied!';
+    } catch(e) {
+      document.execCommand('copy');
+      overlay.querySelector('#csvCopyBtn').textContent = 'Copied!';
+    }
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+// ──────────────────────────────────────────────
+// HELPERS
+// ──────────────────────────────────────────────
+function formatDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function formatDisplay(d) {
+  const dow = d.getDay() === 0 ? 7 : d.getDay();
+  return `${DAYS_SHORT[dow-1]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+init();
+</script>
+</body>
+</html>
