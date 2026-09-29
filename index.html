@@ -157,6 +157,21 @@
   .day-cell.escalation { background: var(--accent); }
   .day-cell.escalation .cell-status { color: var(--ink); font-weight: 800; }
   .day-cell.standby { background: var(--gray-light); }
+  .day-cell.opted-working { background: var(--teal-light); box-shadow: inset 0 0 0 1px var(--teal); }
+  .day-cell.opted-working .cell-status { color: #0E7490; font-weight: 700; }
+  .day-cell.holiday {
+    background: #D4D3CB;
+    cursor: default;
+  }
+  .day-cell.holiday .cell-status { color: #55544B; font-weight: 700; }
+  .day-cell.holiday .cell-day-num { color: #6E6D62; }
+
+  .day-cell.today-col { box-shadow: inset 0 0 0 2px var(--ink); z-index: 1; }
+  .today-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); border: 1px solid var(--ink);
+    margin-right: 3px; vertical-align: middle;
+  }
   .day-cell:not(.weekend):not(.not-scheduled):hover { filter: brightness(0.96); }
 
   .cell-status {
@@ -275,7 +290,10 @@
     <span class="chip" style="background:var(--teal-light);color:var(--teal)"><span class="chip-dot" style="background:var(--teal)"></span>Divya — Mergeworld (Fri)</span>
     <span class="chip" style="background:var(--purple-light);color:var(--purple)"><span class="chip-dot" style="background:var(--purple)"></span>Divya — Smartpandalabs</span>
     <span class="chip" style="background:var(--accent);color:var(--ink);font-weight:700"><span class="chip-dot" style="background:var(--ink)"></span>Sanghmitra — Escalation Cover</span>
+    <span class="chip" style="background:var(--teal-light);color:#0E7490"><span class="chip-dot" style="background:#0E7490"></span>Opted-in Working</span>
+    <span class="chip" style="background:#D4D3CB;color:#55544B"><span class="chip-dot" style="background:#6E6D62"></span>🥳 Team Holiday</span>
     <span class="chip" style="background:#f1f5f9;color:var(--muted)"><span class="chip-dot" style="background:var(--muted)"></span>Weekend / N/A</span>
+    <span class="chip" style="background:#fff;color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink);"><span class="chip-dot" style="background:var(--accent);border:1px solid var(--ink)"></span>Today</span>
   </div>
 
   <!-- Alerts -->
@@ -304,16 +322,17 @@
 <!-- Leave Modal -->
 <div class="modal-overlay" id="leaveModal">
   <div class="modal">
-    <h3 id="modalTitle">Mark Leave</h3>
+    <h3 id="modalTitle">Mark Status</h3>
     <div class="sub" id="modalSub"></div>
-    <label>Leave Date</label>
-    <input type="date" id="leaveDate" />
-    <label>Reason (optional)</label>
+    <label>Reason / Note (optional)</label>
     <input type="text" id="leaveReason" placeholder="e.g. Sick, Personal, Travel" />
+    <div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;">
+      <button class="btn btn-danger" onclick="saveLeave('leave')">🏖 Mark Leave</button>
+      <button class="btn" id="optInWorkingBtn" style="display:none;background:var(--teal-light);color:#0E7490;" onclick="saveLeave('working')">✓ Mark Working on Mergeworld</button>
+      <button class="btn btn-ghost" onclick="removeLeave()" id="removeLeaveBtn" style="display:none">Clear Status</button>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-danger" onclick="removeLeave()" id="removeLeaveBtn" style="display:none">Remove Leave</button>
-      <button class="btn btn-primary" onclick="saveLeave()">Mark Leave</button>
     </div>
   </div>
 </div>
@@ -558,8 +577,42 @@ function getDayOfWeek(dateStr) {
   return day === 0 ? 7 : day;
 }
 
+// ──────────────────────────────────────────────
+// HOLIDAYS
+// Christmas break: Dec 25 – Jan 1 every year, whole team off.
+// ──────────────────────────────────────────────
+function isHolidayDate(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  if (m === 12 && day >= 25) return true;   // Christmas break
+  if (m === 1 && day === 1) return true;    // New Year's Day
+  if (m === 10 && day === 2) return true;   // Oct 2 team holiday
+  return false;
+}
+
+function getHolidayName(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  if (m === 10 && day === 2) return '🥳 Holiday';
+  return '🥳 Christmas Break';
+}
+
+function isTodayDate(dateStr) {
+  return dateStr === formatDate(new Date());
+}
+
 function isOnLeave(resourceId, dateStr) {
-  return leaves[dateStr] && leaves[dateStr][resourceId] !== undefined;
+  const entry = leaves[dateStr] && leaves[dateStr][resourceId];
+  if (!entry) return false;
+  // Back-compat: entries saved before the status field existed are leave entries.
+  return entry.status === 'leave' || entry.status === undefined;
+}
+
+function isOptedWorking(resourceId, dateStr) {
+  const entry = leaves[dateStr] && leaves[dateStr][resourceId];
+  return !!(entry && entry.status === 'working');
 }
 
 function isDedicatedOnLeave(dateStr) {
@@ -572,6 +625,7 @@ function dedicatedOnLeaveList(dateStr) {
 
 function isDivyaBackupNeeded(dateStr) {
   // Mon-Thu: if any dedicated resource is on leave, and Divya herself isn't also on leave
+  if (isHolidayDate(dateStr)) return false;
   const dow = getDayOfWeek(dateStr);
   if (dow >= 1 && dow <= 4) {
     return isDedicatedOnLeave(dateStr) && !isOnLeave('divya', dateStr);
@@ -590,8 +644,9 @@ function isBothPartTimeOnLeave(dateStr) {
 // Sanghmitra (shadow escalation) steps in when EITHER:
 //  a) a Dedicated resource AND Divya are BOTH on leave the same day, OR
 //  b) both part-time dedicated resources (Vishal & Vaishali) are on leave the same day
-// — whichever applies, on any weekday.
+// — whichever applies, on any weekday, outside the holiday break.
 function sanghmitraTrigger(dateStr) {
+  if (isHolidayDate(dateStr)) return null;
   const dow = getDayOfWeek(dateStr);
   if (dow >= 6) return null;
   if (isOnLeave('sanghmitra', dateStr)) return null;
@@ -605,6 +660,8 @@ function isSanghmitraNeeded(dateStr) {
 }
 
 function getCellState(resource, dateStr) {
+  if (isHolidayDate(dateStr)) return 'holiday';
+
   const dow = getDayOfWeek(dateStr);
   const isWeekend = dow >= 6;
 
@@ -613,16 +670,17 @@ function getCellState(resource, dateStr) {
   if (resource.id === 'sanghmitra') {
     if (isOnLeave('sanghmitra', dateStr)) return 'on-leave';
     if (isSanghmitraNeeded(dateStr)) return 'escalation';
+    if (isOptedWorking('sanghmitra', dateStr)) return 'opted-working';
     return 'standby';
   }
 
   if (resource.id === 'divya') {
-    if (dow === 5) { // Friday
-      if (isOnLeave('divya', dateStr)) return 'on-leave';
+    if (isOnLeave('divya', dateStr)) return 'on-leave';
+    if (dow === 5) { // Friday — her regular Mergeworld day
       return 'adhoc-day';
     } else {
-      // Mon-Thu: Divya is on Smartpandalabs
-      if (isOnLeave('divya', dateStr)) return 'on-leave'; // just mark for tracking
+      // Mon-Thu: normally on Smartpandalabs, unless she's opted in to work Mergeworld
+      if (isOptedWorking('divya', dateStr)) return 'adhoc-day';
       return 'adhoc-other';
     }
   }
@@ -636,16 +694,19 @@ function getCellLabel(resource, dateStr) {
   const state = getCellState(resource, dateStr);
   const dow = getDayOfWeek(dateStr);
   if (state === 'weekend') return '';
+  if (state === 'holiday') return getHolidayName(dateStr);
 
   if (resource.id === 'sanghmitra') {
     if (state === 'on-leave') return '🏖 Leave';
     if (state === 'escalation') return '⚡ Covering';
+    if (state === 'opted-working') return '✓ Mergeworld (opt-in)';
     return '· Standby';
   }
 
   if (resource.id === 'divya') {
     if (state === 'on-leave') return '🏖 Leave';
     if (state === 'adhoc-day') {
+      if (dow !== 5 && isOptedWorking('divya', dateStr)) return '✓ Mergeworld (opt-in)';
       const backupNeeded = isSanghmitraNeeded(dateStr);
       return backupNeeded ? '🔔 Backup' : '✓ Mergeworld';
     }
@@ -663,6 +724,7 @@ function getCellLabel(resource, dateStr) {
 }
 
 function hasConflict(dateStr) {
+  if (isHolidayDate(dateStr)) return false;
   const dow = getDayOfWeek(dateStr);
   if (dow >= 6) return false;
   if (!isOnLeave('sanghmitra', dateStr)) return false;
@@ -761,8 +823,10 @@ function renderCalendar() {
         const dateStr = formatDate(date);
         const dow = date.getDay() === 0 ? 7 : date.getDay();
         const isWeekend = dow >= 6;
+        const isHoliday = isHolidayDate(dateStr);
+        const isToday = isTodayDate(dateStr);
         const state = getCellState(resource, dateStr);
-        const conflict = !isWeekend && hasConflict(dateStr);
+        const conflict = !isWeekend && !isHoliday && hasConflict(dateStr);
 
         const cell = document.createElement('div');
         cell.className = 'day-cell';
@@ -770,13 +834,18 @@ function renderCalendar() {
         if (!inMonth) {
           cell.style.opacity = '0.3';
         }
+        if (isToday) {
+          cell.classList.add('today-col');
+        }
 
         // Apply state class
-        if (state === 'weekend') cell.classList.add('weekend');
+        if (state === 'holiday') cell.classList.add('holiday');
+        else if (state === 'weekend') cell.classList.add('weekend');
         else if (state === 'on-leave') cell.classList.add('on-leave');
         else if (state === 'adhoc-day') cell.classList.add('adhoc-day');
         else if (state === 'adhoc-other') cell.classList.add('adhoc-other');
         else if (state === 'escalation') cell.classList.add('escalation');
+        else if (state === 'opted-working') cell.classList.add('opted-working');
         else if (state === 'standby') cell.classList.add('standby');
         else if (state === 'backup') cell.classList.add('backup');
         else cell.classList.add('working');
@@ -793,13 +862,13 @@ function renderCalendar() {
           }
         }
 
-        cell.innerHTML = `<div class="cell-day-num">${date.getDate()}</div>
+        cell.innerHTML = `<div class="cell-day-num">${isToday ? '<span class=\"today-dot\"></span>' : ''}${date.getDate()}</div>
           <div class="cell-status">${label2.replace('\n','<br>')}</div>
           ${conflict ? '<div class="cell-flag">!</div>' : ''}`;
 
-        // Click to open leave modal (only working cells for in-month non-weekend)
-        if (inMonth && !isWeekend) {
-          // Divya can only be marked on Mon-Thu (for tracking her leave from Smartpanda) or Friday
+        // Click to open the status modal (in-month, non-weekend, non-holiday days only —
+        // during the Christmas break the whole team is off, nothing to mark)
+        if (inMonth && !isWeekend && !isHoliday) {
           cell.style.cursor = 'pointer';
           cell.addEventListener('click', () => openModal(resource, dateStr));
         }
@@ -823,6 +892,7 @@ function renderAlerts() {
     const dateStr = formatDate(d);
     const dow = d.getDay() === 0 ? 7 : d.getDay();
     if (dow >= 6) continue;
+    if (isHolidayDate(dateStr)) continue;
 
     const conflict = hasConflict(dateStr);
     if (conflict && conflict.type === 'danger') {
@@ -859,11 +929,12 @@ function renderSummary() {
   const firstDay = new Date(currentYear, currentMonth, 1);
   const lastDay = new Date(currentYear, currentMonth + 1, 0);
 
-  let totalLeaves = 0, backupDays = 0, escalationDays = 0, conflicts = 0, workingDays = 0;
+  let totalLeaves = 0, backupDays = 0, escalationDays = 0, conflicts = 0, workingDays = 0, holidayDays = 0;
   for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
     const dateStr = formatDate(d);
     const dow = d.getDay() === 0 ? 7 : d.getDay();
     if (dow >= 6) continue;
+    if (isHolidayDate(dateStr)) { holidayDays++; continue; }
     workingDays++;
     RESOURCES.forEach(r => { if (isOnLeave(r.id, dateStr)) totalLeaves++; });
     if (isDivyaBackupNeeded(dateStr)) backupDays++;
@@ -877,6 +948,7 @@ function renderSummary() {
     <div class="stat-card"><div class="stat-val" style="color:var(--amber)">${backupDays}</div><div class="stat-label">Backup Days (Divya)</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--ink)">${escalationDays}</div><div class="stat-label">Escalation Days (Sanghmitra)</div></div>
     <div class="stat-card"><div class="stat-val" style="color:${conflicts>0?'var(--red)':'var(--green)'}">${conflicts}</div><div class="stat-label">Coverage Conflicts</div></div>
+    ${holidayDays > 0 ? `<div class="stat-card"><div class="stat-val" style="color:#55544B;">${holidayDays}</div><div class="stat-label">Holiday Days 🥳</div></div>` : ''}
   `;
 }
 
@@ -885,15 +957,24 @@ function renderSummary() {
 // ──────────────────────────────────────────────
 function openModal(resource, dateStr) {
   modalContext = { resource, dateStr };
-  const alreadyOnLeave = isOnLeave(resource.id, dateStr);
-  const leaveInfo = alreadyOnLeave && leaves[dateStr] && leaves[dateStr][resource.id];
+  const entry = leaves[dateStr] && leaves[dateStr][resource.id];
+  const currentStatus = entry ? (entry.status || 'leave') : null; // back-compat: no status = leave
 
-  document.getElementById('modalTitle').textContent = `${resource.name} — Leave`;
+  document.getElementById('modalTitle').textContent = `${resource.name} — ${formatDisplay(new Date(dateStr + 'T12:00:00'))}`;
   const d = new Date(dateStr + 'T12:00:00');
-  document.getElementById('modalSub').textContent = `${DAYS_SHORT[((d.getDay()||7)-1)]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-  document.getElementById('leaveDate').value = dateStr;
-  document.getElementById('leaveReason').value = leaveInfo ? (leaveInfo.reason || '') : '';
-  document.getElementById('removeLeaveBtn').style.display = alreadyOnLeave ? 'inline-block' : 'none';
+  document.getElementById('modalSub').textContent = currentStatus === 'leave'
+    ? 'Currently marked: On Leave'
+    : currentStatus === 'working'
+      ? 'Currently marked: Working on Mergeworld (opt-in)'
+      : 'No status marked — assumed to follow default schedule';
+  document.getElementById('leaveReason').value = entry ? (entry.reason || '') : '';
+  document.getElementById('removeLeaveBtn').style.display = currentStatus ? 'inline-block' : 'none';
+
+  // Only Divya and Sanghmitra can opt themselves IN as working (dedicated resources
+  // are working by default already, so that toggle doesn't apply to them).
+  const canOptIn = resource.id === 'divya' || resource.id === 'sanghmitra';
+  document.getElementById('optInWorkingBtn').style.display = canOptIn ? 'inline-block' : 'none';
+
   document.getElementById('leaveModal').classList.add('open');
 }
 
@@ -902,12 +983,12 @@ function closeModal() {
   modalContext = null;
 }
 
-async function saveLeave() {
+async function saveLeave(status) {
   if (!modalContext) return;
   const { resource, dateStr } = modalContext;
   const reason = document.getElementById('leaveReason').value.trim();
   if (!leaves[dateStr]) leaves[dateStr] = {};
-  leaves[dateStr][resource.id] = { reason };
+  leaves[dateStr][resource.id] = { status: status, reason };
   closeModal();
   render();
   await saveToStorage();
