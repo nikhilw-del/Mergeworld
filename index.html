@@ -6,30 +6,33 @@
 <title>Mergeworld Leave & Backup Tracker</title>
 <style>
   :root {
-    --bg: #F7F8FC;
+    --bg: #FAFAF8;
     --surface: #FFFFFF;
-    --border: #E2E6F0;
-    --accent: #4B6BFB;
-    --accent-light: #EEF1FF;
-    --text: #1A1D2E;
-    --muted: #6B7280;
+    --border: #E8E6DF;
+    --accent: #FFDB2D;
+    --accent-light: #FFF7D6;
+    --ink: #1A1A1A;
+    --text: #1A1A1A;
+    --muted: #6B6B66;
     --green: #16A34A;
     --green-light: #DCFCE7;
-    --amber: #D97706;
-    --amber-light: #FEF3C7;
+    --amber: #B45309;
+    --amber-light: #FFF1C2;
     --red: #DC2626;
     --red-light: #FEE2E2;
     --purple: #7C3AED;
     --purple-light: #EDE9FE;
     --teal: #0891B2;
     --teal-light: #CFFAFE;
-    --gray-light: #F1F5F9;
+    --escalation: #1A1A1A;
+    --escalation-light: #FFDB2D;
+    --gray-light: #F1F1EC;
     --radius: 10px;
-    --shadow: 0 1px 4px rgba(0,0,0,0.07);
+    --shadow: 0 1px 4px rgba(26,26,26,0.06);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
     font-size: 13px;
@@ -37,8 +40,8 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    background: var(--ink);
+    border-bottom: 3px solid var(--accent);
     padding: 14px 20px;
     display: flex;
     align-items: center;
@@ -47,21 +50,21 @@
     top: 0;
     z-index: 100;
   }
-  .logo { font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
+  .logo { font-weight: 700; font-size: 15px; letter-spacing: -0.3px; color: #fff; }
   .logo span { color: var(--accent); }
   .month-nav { display: flex; align-items: center; gap: 10px; }
   .month-nav button {
-    background: var(--gray-light);
-    border: none;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.18);
     border-radius: 6px;
     padding: 5px 10px;
     cursor: pointer;
     font-size: 13px;
-    color: var(--text);
+    color: #fff;
     transition: background 0.15s;
   }
-  .month-nav button:hover { background: var(--border); }
-  .month-label { font-weight: 600; font-size: 14px; min-width: 120px; text-align: center; }
+  .month-nav button:hover { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+  .month-label { font-weight: 700; font-size: 14px; min-width: 120px; text-align: center; color: #fff; }
 
   .main { padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
 
@@ -106,9 +109,9 @@
   .cal-header {
     display: grid;
     grid-template-columns: 100px repeat(7, 1fr);
-    background: var(--accent);
-    color: white;
-    font-weight: 600; font-size: 11px;
+    background: var(--ink);
+    color: var(--accent);
+    font-weight: 700; font-size: 11px;
   }
   .cal-header div, .cal-body .day-label {
     padding: 8px 6px; text-align: center;
@@ -151,6 +154,9 @@
   .day-cell.backup { background: var(--amber-light); }
   .day-cell.adhoc-day { background: var(--teal-light); }
   .day-cell.adhoc-other { background: var(--purple-light); }
+  .day-cell.escalation { background: var(--accent); }
+  .day-cell.escalation .cell-status { color: var(--ink); font-weight: 800; }
+  .day-cell.standby { background: var(--gray-light); }
   .day-cell:not(.weekend):not(.not-scheduled):hover { filter: brightness(0.96); }
 
   .cell-status {
@@ -204,7 +210,7 @@
     padding: 8px 10px; font-size: 13px; margin-bottom: 12px;
     outline: none; font-family: inherit;
   }
-  .modal select:focus, .modal input:focus { border-color: var(--accent); }
+  .modal select:focus, .modal input:focus { border-color: var(--ink); }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
   .btn {
     border: none; border-radius: 7px; padding: 8px 16px;
@@ -212,7 +218,7 @@
     transition: opacity 0.15s;
   }
   .btn:hover { opacity: 0.85; }
-  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary { background: var(--accent); color: var(--ink); font-weight: 700; }
   .btn-ghost { background: var(--gray-light); color: var(--text); }
   .btn-danger { background: var(--red-light); color: var(--red); }
 
@@ -251,10 +257,7 @@
     <div class="month-label" id="monthLabel"></div>
     <button onclick="changeMonth(1)">&#8594;</button>
   </div>
-  <div style="display:flex;align-items:center;gap:14px;">
-    <span id="syncStatus" style="font-size:11px;font-weight:600;color:#D97706;">● Connecting…</span>
-    <button class="btn btn-primary" onclick="exportCSV()" style="font-size:12px;padding:6px 13px;">⬇ Export CSV</button>
-  </div>
+  <div style="width:1px;"></div>
 </header>
 
 <div class="main">
@@ -271,6 +274,7 @@
     <span class="chip" style="background:var(--amber-light);color:var(--amber)"><span class="chip-dot" style="background:var(--amber)"></span>Backup Active</span>
     <span class="chip" style="background:var(--teal-light);color:var(--teal)"><span class="chip-dot" style="background:var(--teal)"></span>Divya — Mergeworld (Fri)</span>
     <span class="chip" style="background:var(--purple-light);color:var(--purple)"><span class="chip-dot" style="background:var(--purple)"></span>Divya — Smartpandalabs</span>
+    <span class="chip" style="background:var(--accent);color:var(--ink);font-weight:700"><span class="chip-dot" style="background:var(--ink)"></span>Sanghmitra — Escalation Cover</span>
     <span class="chip" style="background:#f1f5f9;color:var(--muted)"><span class="chip-dot" style="background:var(--muted)"></span>Weekend / N/A</span>
   </div>
 
@@ -354,8 +358,20 @@ const RESOURCES = [
     workDays: [5], // Friday for Mergeworld
     color: '#0891B2',
     bgColor: '#CFFAFE'
+  },
+  {
+    id: 'sanghmitra',
+    name: 'Sanghmitra',
+    type: 'Shadow Escalation (Full-time)',
+    engagement: 'Covers only when a Dedicated AND Divya are both on leave',
+    workDays: [1,2,3,4,5],
+    color: '#1A1A1A',
+    bgColor: '#FFDB2D',
+    isShadow: true
   }
 ];
+
+const DEDICATED_IDS = ['poushali','vishal','vaishali'];
 
 const DAYS_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -460,11 +476,19 @@ function isOnLeave(resourceId, dateStr) {
   return leaves[dateStr] && leaves[dateStr][resourceId] !== undefined;
 }
 
+function isDedicatedOnLeave(dateStr) {
+  return DEDICATED_IDS.some(id => isOnLeave(id, dateStr));
+}
+
+function dedicatedOnLeaveList(dateStr) {
+  return RESOURCES.filter(r => DEDICATED_IDS.includes(r.id) && isOnLeave(r.id, dateStr));
+}
+
 function isDivyaBackupNeeded(dateStr) {
-  // Mon-Thu: if any dedicated resource is on leave
+  // Mon-Thu: if any dedicated resource is on leave, and Divya herself isn't also on leave
   const dow = getDayOfWeek(dateStr);
   if (dow >= 1 && dow <= 4) {
-    return RESOURCES.filter(r => r.id !== 'divya').some(r => isOnLeave(r.id, dateStr));
+    return isDedicatedOnLeave(dateStr) && !isOnLeave('divya', dateStr);
   }
   return false;
 }
@@ -473,16 +497,29 @@ function isDivyaOnLeave(dateStr) {
   return isOnLeave('divya', dateStr);
 }
 
+// Sanghmitra (shadow escalation) steps in only when a Dedicated resource
+// AND Divya are BOTH on leave on the same day — any weekday.
+function isSanghmitraNeeded(dateStr) {
+  const dow = getDayOfWeek(dateStr);
+  if (dow >= 6) return false;
+  return isDedicatedOnLeave(dateStr) && isOnLeave('divya', dateStr) && !isOnLeave('sanghmitra', dateStr);
+}
+
 function getCellState(resource, dateStr) {
   const dow = getDayOfWeek(dateStr);
   const isWeekend = dow >= 6;
 
   if (isWeekend) return 'weekend';
 
+  if (resource.id === 'sanghmitra') {
+    if (isOnLeave('sanghmitra', dateStr)) return 'on-leave';
+    if (isSanghmitraNeeded(dateStr)) return 'escalation';
+    return 'standby';
+  }
+
   if (resource.id === 'divya') {
     if (dow === 5) { // Friday
       if (isOnLeave('divya', dateStr)) return 'on-leave';
-      if (isDivyaBackupNeeded(dateStr)) return 'backup'; // shouldn't happen on Fri usually
       return 'adhoc-day';
     } else {
       // Mon-Thu: Divya is on Smartpandalabs
@@ -500,15 +537,23 @@ function getCellLabel(resource, dateStr) {
   const state = getCellState(resource, dateStr);
   const dow = getDayOfWeek(dateStr);
   if (state === 'weekend') return '';
+
+  if (resource.id === 'sanghmitra') {
+    if (state === 'on-leave') return '🏖 Leave';
+    if (state === 'escalation') return '⚡ Covering';
+    return '· Standby';
+  }
+
   if (resource.id === 'divya') {
     if (state === 'on-leave') return '🏖 Leave';
     if (state === 'adhoc-day') {
-      // check if backup needed
-      const backupNeeded = isDivyaBackupNeeded(dateStr);
-      // Fri: divya works MW anyway
+      const backupNeeded = isSanghmitraNeeded(dateStr);
       return backupNeeded ? '🔔 Backup' : '✓ Mergeworld';
     }
-    if (state === 'adhoc-other') return '🔀 Smartpanda';
+    if (state === 'adhoc-other') {
+      const backupNeeded = isDivyaBackupNeeded(dateStr);
+      return backupNeeded ? '🔔 Backup' : '🔀 Smartpanda';
+    }
     return '';
   }
   if (state === 'on-leave') {
@@ -522,12 +567,19 @@ function hasConflict(dateStr) {
   const dow = getDayOfWeek(dateStr);
   if (dow >= 6) return false;
 
-  // Rule: if Divya is on leave Mon-Thu, ideally no dedicated should be on leave
-  if (dow >= 1 && dow <= 4 && isDivyaOnLeave(dateStr)) {
-    const dedicatedOnLeave = RESOURCES.filter(r => r.id !== 'divya' && isOnLeave(r.id, dateStr));
-    if (dedicatedOnLeave.length > 0) return { type: 'danger', dedicatedOnLeave };
+  // True unresolved conflict: Dedicated + Divya + Sanghmitra all on leave same day
+  const dedicatedLeave = dedicatedOnLeaveList(dateStr);
+  if (dedicatedLeave.length > 0 && isOnLeave('divya', dateStr) && isOnLeave('sanghmitra', dateStr)) {
+    return { type: 'danger', dedicatedOnLeave: dedicatedLeave };
   }
   return false;
+}
+
+function isEscalationActive(dateStr) {
+  const dow = getDayOfWeek(dateStr);
+  if (dow >= 6) return false;
+  const dedicatedLeave = dedicatedOnLeaveList(dateStr);
+  return dedicatedLeave.length > 0 && isOnLeave('divya', dateStr) && !isOnLeave('sanghmitra', dateStr);
 }
 
 // ──────────────────────────────────────────────
@@ -544,7 +596,8 @@ function renderRoster() {
   const typeColors = {
     'Full-time Dedicated': { bg: '#DCFCE7', color: '#16A34A' },
     'Part-time Dedicated': { bg: '#DBEAFE', color: '#2563EB' },
-    'Adhoc (Fri only)': { bg: '#CFFAFE', color: '#0891B2' }
+    'Adhoc (Fri only)': { bg: '#CFFAFE', color: '#0891B2' },
+    'Shadow Escalation (Full-time)': { bg: '#FFDB2D', color: '#1A1A1A' }
   };
   document.getElementById('rosterCards').innerHTML = RESOURCES.map(r => {
     const tc = typeColors[r.type] || { bg: '#F3F4F6', color: '#6B7280' };
@@ -622,17 +675,15 @@ function renderCalendar() {
         else if (state === 'on-leave') cell.classList.add('on-leave');
         else if (state === 'adhoc-day') cell.classList.add('adhoc-day');
         else if (state === 'adhoc-other') cell.classList.add('adhoc-other');
+        else if (state === 'escalation') cell.classList.add('escalation');
+        else if (state === 'standby') cell.classList.add('standby');
         else if (state === 'backup') cell.classList.add('backup');
         else cell.classList.add('working');
-
-        // Check backup for dedicated on Mon-Thu
-        const backupActive = resource.id !== 'divya' && !isWeekend && state !== 'on-leave' && isDivyaBackupNeeded(dateStr) && dow >= 1 && dow <= 4;
 
         let label2 = getCellLabel(resource, dateStr);
 
         // If divya is backing up this day (Mon-Thu), show on Divya's row
         if (resource.id === 'divya' && state === 'adhoc-other') {
-          // Check if any dedicated is on leave today
           const backupToday = isDivyaBackupNeeded(dateStr);
           if (backupToday) {
             cell.classList.remove('adhoc-other');
@@ -675,15 +726,16 @@ function renderAlerts() {
     const conflict = hasConflict(dateStr);
     if (conflict && conflict.type === 'danger') {
       msgs.push(`<div class="alert danger"><span class="alert-icon">⚠️</span>
-        <div><strong>${formatDisplay(d)}:</strong> Divya is on leave AND ${conflict.dedicatedOnLeave.map(r=>r.name).join(', ')} ${conflict.dedicatedOnLeave.length>1?'are':'is'} also on leave — no backup available.</div>
+        <div><strong>${formatDisplay(d)}:</strong> ${conflict.dedicatedOnLeave.map(r=>r.name).join(', ')}, Divya AND Sanghmitra are all on leave — no coverage available.</div>
       </div>`);
-    }
-
-    // If 3 dedicated on leave same day
-    const dedicatedLeaving = RESOURCES.filter(r => r.id !== 'divya' && isOnLeave(r.id, dateStr));
-    if (dedicatedLeaving.length >= 2 && dow >= 1 && dow <= 4) {
+    } else if (isEscalationActive(dateStr)) {
       msgs.push(`<div class="alert warn"><span class="alert-icon">⚡</span>
-        <div><strong>${formatDisplay(d)}:</strong> ${dedicatedLeaving.map(r=>r.name).join(' & ')} are both on leave. Divya is assigned as backup (Mon–Thu).</div>
+        <div><strong>${formatDisplay(d)}:</strong> ${dedicatedOnLeaveList(dateStr).map(r=>r.name).join(', ')} and Divya are both on leave. Sanghmitra is escalated to cover.</div>
+      </div>`);
+    } else if (isDivyaBackupNeeded(dateStr)) {
+      const dedicatedLeaving = dedicatedOnLeaveList(dateStr);
+      msgs.push(`<div class="alert warn"><span class="alert-icon">🔔</span>
+        <div><strong>${formatDisplay(d)}:</strong> ${dedicatedLeaving.map(r=>r.name).join(' & ')} on leave. Divya is assigned as backup.</div>
       </div>`);
     }
   }
@@ -699,7 +751,7 @@ function renderSummary() {
   const firstDay = new Date(currentYear, currentMonth, 1);
   const lastDay = new Date(currentYear, currentMonth + 1, 0);
 
-  let totalLeaves = 0, backupDays = 0, conflicts = 0, workingDays = 0;
+  let totalLeaves = 0, backupDays = 0, escalationDays = 0, conflicts = 0, workingDays = 0;
   for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
     const dateStr = formatDate(d);
     const dow = d.getDay() === 0 ? 7 : d.getDay();
@@ -707,6 +759,7 @@ function renderSummary() {
     workingDays++;
     RESOURCES.forEach(r => { if (isOnLeave(r.id, dateStr)) totalLeaves++; });
     if (isDivyaBackupNeeded(dateStr)) backupDays++;
+    if (isEscalationActive(dateStr)) escalationDays++;
     if (hasConflict(dateStr)) conflicts++;
   }
 
@@ -714,6 +767,7 @@ function renderSummary() {
     <div class="stat-card"><div class="stat-val">${workingDays}</div><div class="stat-label">Working Days</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--red)">${totalLeaves}</div><div class="stat-label">Leave Instances</div></div>
     <div class="stat-card"><div class="stat-val" style="color:var(--amber)">${backupDays}</div><div class="stat-label">Backup Days (Divya)</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--ink)">${escalationDays}</div><div class="stat-label">Escalation Days (Sanghmitra)</div></div>
     <div class="stat-card"><div class="stat-val" style="color:${conflicts>0?'var(--red)':'var(--green)'}">${conflicts}</div><div class="stat-label">Coverage Conflicts</div></div>
   `;
 }
