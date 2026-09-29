@@ -363,7 +363,7 @@ const RESOURCES = [
     id: 'sanghmitra',
     name: 'Sanghmitra',
     type: 'Shadow Escalation (Full-time)',
-    engagement: 'Covers only when a Dedicated AND Divya are both on leave',
+    engagement: 'Covers when a Dedicated + Divya are both on leave, or when both part-timers (Vishal & Vaishali) are on leave',
     workDays: [1,2,3,4,5],
     color: '#1A1A1A',
     bgColor: '#FFDB2D',
@@ -372,6 +372,7 @@ const RESOURCES = [
 ];
 
 const DEDICATED_IDS = ['poushali','vishal','vaishali'];
+const PART_TIME_IDS = ['vishal','vaishali'];
 
 const DAYS_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -390,7 +391,7 @@ let fbSetDoc = null;
 // Firebase Console → Project settings → General → Your apps → SDK setup).
 // Leave FIREBASE_CONFIG as null to run in local-only mode.
 // ──────────────────────────────────────────────
-const FIREBASE_CONFIG = {
+const FIREBASE_CONFIG = = {
   apiKey: "AIzaSyCfaqZbRZCvdi8gXYwbwLiyShQLv5EE_xY",
   authDomain: "mergeworld-tracker.firebaseapp.com",
   projectId: "mergeworld-tracker",
@@ -582,12 +583,25 @@ function isDivyaOnLeave(dateStr) {
   return isOnLeave('divya', dateStr);
 }
 
-// Sanghmitra (shadow escalation) steps in only when a Dedicated resource
-// AND Divya are BOTH on leave on the same day — any weekday.
-function isSanghmitraNeeded(dateStr) {
+function isBothPartTimeOnLeave(dateStr) {
+  return PART_TIME_IDS.every(id => isOnLeave(id, dateStr));
+}
+
+// Sanghmitra (shadow escalation) steps in when EITHER:
+//  a) a Dedicated resource AND Divya are BOTH on leave the same day, OR
+//  b) both part-time dedicated resources (Vishal & Vaishali) are on leave the same day
+// — whichever applies, on any weekday.
+function sanghmitraTrigger(dateStr) {
   const dow = getDayOfWeek(dateStr);
-  if (dow >= 6) return false;
-  return isDedicatedOnLeave(dateStr) && isOnLeave('divya', dateStr) && !isOnLeave('sanghmitra', dateStr);
+  if (dow >= 6) return null;
+  if (isOnLeave('sanghmitra', dateStr)) return null;
+  if (isDedicatedOnLeave(dateStr) && isOnLeave('divya', dateStr)) return 'dedicated_divya';
+  if (isBothPartTimeOnLeave(dateStr)) return 'both_parttime';
+  return null;
+}
+
+function isSanghmitraNeeded(dateStr) {
+  return !!sanghmitraTrigger(dateStr);
 }
 
 function getCellState(resource, dateStr) {
@@ -651,20 +665,22 @@ function getCellLabel(resource, dateStr) {
 function hasConflict(dateStr) {
   const dow = getDayOfWeek(dateStr);
   if (dow >= 6) return false;
+  if (!isOnLeave('sanghmitra', dateStr)) return false;
 
-  // True unresolved conflict: Dedicated + Divya + Sanghmitra all on leave same day
+  // True unresolved conflict: Sanghmitra is ALSO on leave on a day she'd otherwise be needed
   const dedicatedLeave = dedicatedOnLeaveList(dateStr);
-  if (dedicatedLeave.length > 0 && isOnLeave('divya', dateStr) && isOnLeave('sanghmitra', dateStr)) {
-    return { type: 'danger', dedicatedOnLeave: dedicatedLeave };
+  if (dedicatedLeave.length > 0 && isOnLeave('divya', dateStr)) {
+    return { type: 'danger', reason: 'dedicated_divya', dedicatedOnLeave: dedicatedLeave };
+  }
+  if (isBothPartTimeOnLeave(dateStr)) {
+    const partTime = RESOURCES.filter(r => PART_TIME_IDS.includes(r.id));
+    return { type: 'danger', reason: 'both_parttime', dedicatedOnLeave: partTime };
   }
   return false;
 }
 
 function isEscalationActive(dateStr) {
-  const dow = getDayOfWeek(dateStr);
-  if (dow >= 6) return false;
-  const dedicatedLeave = dedicatedOnLeaveList(dateStr);
-  return dedicatedLeave.length > 0 && isOnLeave('divya', dateStr) && !isOnLeave('sanghmitra', dateStr);
+  return sanghmitraTrigger(dateStr) !== null;
 }
 
 // ──────────────────────────────────────────────
@@ -810,12 +826,19 @@ function renderAlerts() {
 
     const conflict = hasConflict(dateStr);
     if (conflict && conflict.type === 'danger') {
+      const who = conflict.reason === 'both_parttime'
+        ? 'Vishal, Vaishali AND Sanghmitra'
+        : `${conflict.dedicatedOnLeave.map(r=>r.name).join(', ')}, Divya AND Sanghmitra`;
       msgs.push(`<div class="alert danger"><span class="alert-icon">⚠️</span>
-        <div><strong>${formatDisplay(d)}:</strong> ${conflict.dedicatedOnLeave.map(r=>r.name).join(', ')}, Divya AND Sanghmitra are all on leave — no coverage available.</div>
+        <div><strong>${formatDisplay(d)}:</strong> ${who} are all on leave — no coverage available.</div>
       </div>`);
     } else if (isEscalationActive(dateStr)) {
+      const trigger = sanghmitraTrigger(dateStr);
+      const reasonText = trigger === 'both_parttime'
+        ? 'Vishal and Vaishali (both part-time) are on leave'
+        : `${dedicatedOnLeaveList(dateStr).map(r=>r.name).join(', ')} and Divya are both on leave`;
       msgs.push(`<div class="alert warn"><span class="alert-icon">⚡</span>
-        <div><strong>${formatDisplay(d)}:</strong> ${dedicatedOnLeaveList(dateStr).map(r=>r.name).join(', ')} and Divya are both on leave. Sanghmitra is escalated to cover.</div>
+        <div><strong>${formatDisplay(d)}:</strong> ${reasonText}. Sanghmitra is escalated to cover.</div>
       </div>`);
     } else if (isDivyaBackupNeeded(dateStr)) {
       const dedicatedLeaving = dedicatedOnLeaveList(dateStr);
